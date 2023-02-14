@@ -51,6 +51,14 @@ namespace MassTransit
             if (bytes.Length != 16)
                 throw new ArgumentException("Exactly 16 bytes expected", nameof(bytes));
 
+        #if NET6_0_OR_GREATER
+            if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
+            {
+                FromByteSpan(bytes, out this);
+                return;
+            }
+        #endif
+
             FromByteArray(bytes, out _a, out _b, out _c, out _d);
         }
 
@@ -60,8 +68,18 @@ namespace MassTransit
                 throw new ArgumentException("must not be null or empty", nameof(value));
 
             var guid = new Guid(value);
+        #if NET6_0_OR_GREATER
+            Span<byte> bytes = stackalloc byte[16];
+            guid.TryWriteBytes(bytes);
 
+            if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
+            {
+                FromByteSpan(bytes, out this);
+                return;
+            }
+        #else
             var bytes = guid.ToByteArray();
+        #endif
 
             FromByteArray(bytes, out _a, out _b, out _c, out _d);
         }
@@ -287,18 +305,19 @@ namespace MassTransit
         public static NewId FromGuid(in Guid guid)
         {
         #if NET6_0_OR_GREATER
+            Span<byte> bytes = stackalloc byte[16];
+            guid.TryWriteBytes(bytes);
+
             if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
             {
-                Span<Guid> span = stackalloc Guid[1];
-                span[0] = guid;
-                Span<byte> byteSpan = MemoryMarshal.Cast<Guid, byte>(span);
-
-                FromByteSpan(byteSpan, out var newId);
+                FromByteSpan(bytes, out var newId);
                 return newId;
             }
         #endif
 
-            var bytes = guid.ToByteArray();
+        #if !NET6_0_OR_GREATER
+            byte[] bytes = new byte[16];
+        #endif
             FromByteArray(bytes, out var a, out var b, out var c, out var d);
 
             return new NewId(a, b, c, d);
@@ -307,18 +326,19 @@ namespace MassTransit
         public static NewId FromSequentialGuid(in Guid guid)
         {
         #if NET6_0_OR_GREATER
+            Span<byte> bytes = stackalloc byte[16];
+            guid.TryWriteBytes(bytes);
+
             if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
             {
-                Span<Guid> span = stackalloc Guid[1];
-                span[0] = guid;
-                Span<byte> byteSpan = MemoryMarshal.Cast<Guid, byte>(span);
-
-                FromSequentialByteSpan(byteSpan, out var newId);
+                FromSequentialByteSpan(bytes, out var newId);
                 return newId;
             }
         #endif
 
-            var bytes = guid.ToByteArray();
+        #if !NET6_0_OR_GREATER
+            byte[] bytes = new byte[16];
+        #endif
             FromSequentialByteArray(bytes, out var a, out var b, out var c, out var d);
 
             return new NewId(a, b, c, d);
@@ -535,6 +555,15 @@ namespace MassTransit
             return _getGenerator().NextSequentialGuid();
         }
 
+    #if NET6_0_OR_GREATER
+        static void FromByteArray(in Span<byte> bytes, out int a, out int b, out int c, out int d)
+        {
+            a = (bytes[10] << 24) | (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
+            b = (bytes[14] << 24) | (bytes[15] << 16) | (bytes[8] << 8) | bytes[9];
+            c = (bytes[7] << 24) | (bytes[6] << 16) | (bytes[5] << 8) | bytes[4];
+            d = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[0] << 8) | bytes[1];
+        }
+    #else
         static void FromByteArray(in byte[] bytes, out int a, out int b, out int c, out int d)
         {
             a = (bytes[10] << 24) | (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
@@ -542,6 +571,7 @@ namespace MassTransit
             c = (bytes[7] << 24) | (bytes[6] << 16) | (bytes[5] << 8) | bytes[4];
             d = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[0] << 8) | bytes[1];
         }
+    #endif
 
     #if NET6_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -557,6 +587,15 @@ namespace MassTransit
         }
     #endif
 
+    #if NET6_0_OR_GREATER
+        static void FromSequentialByteArray(in Span<byte> bytes, out int a, out int b, out int c, out int d)
+        {
+            a = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0];
+            b = (bytes[5] << 24) | (bytes[4] << 16) | (bytes[7] << 8) | bytes[6];
+            c = (bytes[8] << 24) | (bytes[9] << 16) | (bytes[10] << 8) | bytes[11];
+            d = (bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15];
+        }
+    #else
         static void FromSequentialByteArray(in byte[] bytes, out int a, out int b, out int c, out int d)
         {
             a = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0];
@@ -564,6 +603,7 @@ namespace MassTransit
             c = (bytes[8] << 24) | (bytes[9] << 16) | (bytes[10] << 8) | bytes[11];
             d = (bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15];
         }
+    #endif
 
     #if NET6_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
