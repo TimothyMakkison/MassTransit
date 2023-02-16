@@ -51,15 +51,7 @@ namespace MassTransit
             if (bytes.Length != 16)
                 throw new ArgumentException("Exactly 16 bytes expected", nameof(bytes));
 
-        #if NET6_0_OR_GREATER
-            if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
-            {
-                FromByteSpan(bytes, out this);
-                return;
-            }
-        #endif
-
-            FromByteArray(bytes, out _a, out _b, out _c, out _d);
+            FromByteArray(bytes, out this);
         }
 
         public NewId(in string value)
@@ -68,20 +60,14 @@ namespace MassTransit
                 throw new ArgumentException("must not be null or empty", nameof(value));
 
             var guid = new Guid(value);
-        #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
             Span<byte> bytes = stackalloc byte[16];
             guid.TryWriteBytes(bytes);
-
-            if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
-            {
-                FromByteSpan(bytes, out this);
-                return;
-            }
-        #else
+#else
             var bytes = guid.ToByteArray();
-        #endif
+#endif
 
-            FromByteArray(bytes, out _a, out _b, out _c, out _d);
+            FromByteArray(bytes, out this);
         }
 
         public NewId(int a, int b, int c, int d)
@@ -184,7 +170,7 @@ namespace MassTransit
         {
             var bytes = _formatterArray.Value!;
 
-        #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
             if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
             {
                 Vector128<byte> vector = Unsafe.As<NewId, Vector128<byte>>(ref Unsafe.AsRef(in this));
@@ -193,7 +179,7 @@ namespace MassTransit
                 MemoryMarshal.TryWrite(bytes, ref result);
                 return bytes;
             }
-        #endif
+#endif
 
             bytes[15] = (byte)(_b >> 16);
             bytes[14] = (byte)(_b >> 24);
@@ -219,7 +205,7 @@ namespace MassTransit
         {
             var bytes = _formatterArray.Value!;
 
-        #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
             if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
             {
                 Vector128<byte> vector = Unsafe.As<NewId, Vector128<byte>>(ref Unsafe.AsRef(in this));
@@ -228,7 +214,7 @@ namespace MassTransit
                 MemoryMarshal.TryWrite(bytes, ref result);
                 return bytes;
             }
-        #endif
+#endif
 
             bytes[15] = (byte)_d;
             bytes[14] = (byte)(_d >> 8);
@@ -252,14 +238,14 @@ namespace MassTransit
 
         public Guid ToGuid()
         {
-        #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
             if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
             {
                 Vector128<byte> bytes = Unsafe.As<NewId, Vector128<byte>>(ref Unsafe.AsRef(in this));
                 Vector128<byte> shuffled = Ssse3.Shuffle(bytes, Vector128.Create((byte)13, 12, 14, 15, 8, 9, 10, 11, 5, 4, 3, 2, 1, 0, 7, 6));
                 return Unsafe.As<Vector128<byte>, Guid>(ref shuffled);
             }
-        #endif
+#endif
 
             var a = (int)(_d & 0xFFFF0000) | ((_d >> 8) & 0x00FF) | ((_d << 8) & 0xFF00);
             var b = (short)_c;
@@ -278,14 +264,14 @@ namespace MassTransit
 
         public Guid ToSequentialGuid()
         {
-        #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
             if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
             {
                 Vector128<byte> bytes = Unsafe.As<NewId, Vector128<byte>>(ref Unsafe.AsRef(in this));
                 Vector128<byte> shuffled = Ssse3.Shuffle(bytes, Vector128.Create((byte)0, 1, 2, 3, 6, 7, 4, 5, 11, 10, 9, 8, 15, 14, 13, 12));
                 return Unsafe.As<Vector128<byte>, Guid>(ref shuffled);
             }
-        #endif
+#endif
 
             var a = _a;
             var b = (short)(_b >> 16);
@@ -304,51 +290,34 @@ namespace MassTransit
 
         public static NewId FromGuid(in Guid guid)
         {
-        #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             Span<byte> bytes = stackalloc byte[16];
             guid.TryWriteBytes(bytes);
+#else
+            var bytes = guid.ToByteArray();
+#endif
 
-            if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
-            {
-                FromByteSpan(bytes, out var newId);
-                return newId;
-            }
-        #endif
-
-        #if !NET6_0_OR_GREATER
-            byte[] bytes = new byte[16];
-        #endif
-            FromByteArray(bytes, out var a, out var b, out var c, out var d);
-
-            return new NewId(a, b, c, d);
+            FromByteArray(bytes, out NewId newId);
+            return newId;
         }
 
         public static NewId FromSequentialGuid(in Guid guid)
         {
-        #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             Span<byte> bytes = stackalloc byte[16];
             guid.TryWriteBytes(bytes);
-
-            if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
-            {
-                FromSequentialByteSpan(bytes, out var newId);
-                return newId;
-            }
-        #endif
-
-        #if !NET6_0_OR_GREATER
-            byte[] bytes = new byte[16];
-        #endif
-            FromSequentialByteArray(bytes, out var a, out var b, out var c, out var d);
-
-            return new NewId(a, b, c, d);
+#else
+            var bytes = guid.ToByteArray();
+#endif
+            FromSequentialByteArray(bytes, out NewId newId);
+            return newId;
         }
 
         public byte[] ToByteArray()
         {
             var bytes = new byte[16];
 
-        #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
             if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
             {
                 Vector128<byte> vector = Unsafe.As<NewId, Vector128<byte>>(ref Unsafe.AsRef(in this));
@@ -357,7 +326,7 @@ namespace MassTransit
                 MemoryMarshal.TryWrite(bytes, ref result);
                 return bytes;
             }
-        #endif
+#endif
 
             bytes[15] = (byte)(_b >> 16);
             bytes[14] = (byte)(_b >> 24);
@@ -555,68 +524,70 @@ namespace MassTransit
             return _getGenerator().NextSequentialGuid();
         }
 
-    #if NET6_0_OR_GREATER
-        static void FromByteArray(in Span<byte> bytes, out int a, out int b, out int c, out int d)
-        {
-            a = (bytes[10] << 24) | (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
-            b = (bytes[14] << 24) | (bytes[15] << 16) | (bytes[8] << 8) | bytes[9];
-            c = (bytes[7] << 24) | (bytes[6] << 16) | (bytes[5] << 8) | bytes[4];
-            d = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[0] << 8) | bytes[1];
-        }
-    #else
-        static void FromByteArray(in byte[] bytes, out int a, out int b, out int c, out int d)
-        {
-            a = (bytes[10] << 24) | (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
-            b = (bytes[14] << 24) | (bytes[15] << 16) | (bytes[8] << 8) | bytes[9];
-            c = (bytes[7] << 24) | (bytes[6] << 16) | (bytes[5] << 8) | bytes[4];
-            d = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[0] << 8) | bytes[1];
-        }
-    #endif
-
-    #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static void FromByteSpan(ReadOnlySpan<byte> span, out NewId newId)
+        static void FromByteArray(ReadOnlySpan<byte> bytes, out NewId newId)
         {
-            Debug.Assert(span.Length == Unsafe.SizeOf<Guid>());
-            Debug.Assert(Ssse3.IsSupported && BitConverter.IsLittleEndian);
+#if NET6_0_OR_GREATER
+            if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
+            {
+                var vector = MemoryMarshal.Read<Vector128<byte>>(bytes);
+                var shuffle = Vector128.Create((byte)13, 12, 11, 10, 9, 8, 15, 14, 4, 5, 6, 7, 1, 0, 2, 3);
+                Vector128<byte> result = Ssse3.Shuffle(vector, shuffle);
+                newId = Unsafe.As<Vector128<byte>, NewId>(ref result);
+                return;
+            }
+#endif
+            var a = (bytes[10] << 24) | (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
+            var b = (bytes[14] << 24) | (bytes[15] << 16) | (bytes[8] << 8) | bytes[9];
+            var c = (bytes[7] << 24) | (bytes[6] << 16) | (bytes[5] << 8) | bytes[4];
+            var d = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[0] << 8) | bytes[1];
 
-            var vector = MemoryMarshal.Read<Vector128<byte>>(span);
-            var shuffle = Vector128.Create((byte)13, 12, 11, 10, 9, 8, 15, 14, 4, 5, 6, 7, 1, 0, 2, 3);
-            Vector128<byte> result = Ssse3.Shuffle(vector, shuffle);
-            newId = Unsafe.As<Vector128<byte>, NewId>(ref result);
+            newId = new NewId(a, b, c, d);
         }
-    #endif
 
-    #if NET6_0_OR_GREATER
-        static void FromSequentialByteArray(in Span<byte> bytes, out int a, out int b, out int c, out int d)
-        {
-            a = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0];
-            b = (bytes[5] << 24) | (bytes[4] << 16) | (bytes[7] << 8) | bytes[6];
-            c = (bytes[8] << 24) | (bytes[9] << 16) | (bytes[10] << 8) | bytes[11];
-            d = (bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15];
-        }
-    #else
-        static void FromSequentialByteArray(in byte[] bytes, out int a, out int b, out int c, out int d)
-        {
-            a = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0];
-            b = (bytes[5] << 24) | (bytes[4] << 16) | (bytes[7] << 8) | bytes[6];
-            c = (bytes[8] << 24) | (bytes[9] << 16) | (bytes[10] << 8) | bytes[11];
-            d = (bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15];
-        }
-    #endif
-
-    #if NET6_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static void FromSequentialByteSpan(ReadOnlySpan<byte> span, out NewId newId)
+        static void FromSequentialByteArray(ReadOnlySpan<byte> bytes, out NewId newId)
         {
-            Debug.Assert(span.Length == Unsafe.SizeOf<Guid>());
-            Debug.Assert(Ssse3.IsSupported && BitConverter.IsLittleEndian);
+#if NET6_0_OR_GREATER
+            if (Ssse3.IsSupported && BitConverter.IsLittleEndian)
+            {
+                var vector = MemoryMarshal.Read<Vector128<byte>>(bytes);
+                var shuffle = Vector128.Create((byte)0, 1, 2, 3, 6, 7, 4, 5, 11, 10, 9, 8, 15, 14, 13, 12);
+                Vector128<byte> result = Ssse3.Shuffle(vector, shuffle);
+                newId = Unsafe.As<Vector128<byte>, NewId>(ref result);
+                return;
+            }
+#endif
+            var a = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0];
+            var b = (bytes[5] << 24) | (bytes[4] << 16) | (bytes[7] << 8) | bytes[6];
+            var c = (bytes[8] << 24) | (bytes[9] << 16) | (bytes[10] << 8) | bytes[11];
+            var d = (bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15];
 
-            var vector = MemoryMarshal.Read<Vector128<byte>>(span);
-            var shuffle = Vector128.Create((byte)0, 1, 2, 3, 6, 7, 4, 5, 11, 10, 9, 8, 15, 14, 13, 12);
-            Vector128<byte> result = Ssse3.Shuffle(vector, shuffle);
-            newId = Unsafe.As<Vector128<byte>, NewId>(ref result);
+            newId = new NewId(a, b, c, d);
         }
-    #endif
+#else
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static void FromByteArray(in byte[] bytes, out NewId newId)
+        {
+            var a = (bytes[10] << 24) | (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
+            var b = (bytes[14] << 24) | (bytes[15] << 16) | (bytes[8] << 8) | bytes[9];
+            var c = (bytes[7] << 24) | (bytes[6] << 16) | (bytes[5] << 8) | bytes[4];
+            var d = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[0] << 8) | bytes[1];
+
+            newId = new NewId(a, b, c, d);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static void FromSequentialByteArray(in byte[] bytes, out NewId newId)
+        {
+            var a = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0];
+            var b = (bytes[5] << 24) | (bytes[4] << 16) | (bytes[7] << 8) | bytes[6];
+            var c = (bytes[8] << 24) | (bytes[9] << 16) | (bytes[10] << 8) | bytes[11];
+            var d = (bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15];
+
+            newId = new NewId(a, b, c, d);
+        }
+#endif
     }
 }
